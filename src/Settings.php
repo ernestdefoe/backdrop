@@ -18,6 +18,7 @@ class Settings
     public const ON_DIRECTORY = self::PREFIX.'on_directory';
     public const DEFAULT = self::PREFIX.'default';
     public const DEFAULT_FRAME = self::PREFIX.'default_frame';
+    public const PRESETS = self::PREFIX.'presets';
 
     public const OVERLAYS = ['gradient', 'darken', 'none'];
 

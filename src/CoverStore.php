@@ -22,6 +22,9 @@ class CoverStore
 {
     public const DISK = 'ernestdefoe-backdrop';
 
+    /** Gallery covers live here, shared by every member who chooses one. */
+    public const PRESETS = 'presets/';
+
     private const FULL_WIDTH = 1920;
     private const SMALL_WIDTH = 960;
 
@@ -32,19 +35,19 @@ class CoverStore
         $this->disk = $filesystems->disk(self::DISK);
     }
 
-    public function store(UploadedFileInterface $file): string
+    public function store(UploadedFileInterface $file, string $folder = ''): string
     {
-        return $this->storePath($file->getStream()->getMetadata('uri'));
+        return $this->storePath($file->getStream()->getMetadata('uri'), $folder);
     }
 
     /**
      * Store a validated image from a local path; returns the stored name.
      */
-    public function storePath(string $path): string
+    public function storePath(string $path, string $folder = ''): string
     {
         $image = $this->images->read($path);
         $animated = $image->isAnimated();
-        $name = Str::random(20).'.'.($animated ? 'gif' : 'webp');
+        $name = $folder.Str::random(20).'.'.($animated ? 'gif' : 'webp');
 
         foreach ([$name => self::FULL_WIDTH, self::small($name) => self::SMALL_WIDTH] as $path => $width) {
             $copy = clone $image;
@@ -56,9 +59,13 @@ class CoverStore
         return $name;
     }
 
-    public function delete(?string $stored): void
+    /**
+     * Delete a member's cover files. A gallery cover is shared, so it is only
+     * deleted when the gallery itself asks ($preset).
+     */
+    public function delete(?string $stored, bool $preset = false): void
     {
-        if (! $stored || self::isExternal($stored)) {
+        if (! $stored || self::isExternal($stored) || (self::isPreset($stored) && ! $preset)) {
             return;
         }
 
@@ -76,6 +83,11 @@ class CoverStore
         }
 
         return $this->disk->url($small ? self::small($stored) : $stored);
+    }
+
+    public static function isPreset(string $stored): bool
+    {
+        return str_starts_with($stored, self::PRESETS);
     }
 
     public static function isExternal(string $stored): bool

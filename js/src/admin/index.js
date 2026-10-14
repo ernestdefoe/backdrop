@@ -4,6 +4,7 @@ import Button from 'flarum/common/components/Button';
 import classList from 'flarum/common/utils/classList';
 
 import CoverModal from '../common/components/CoverModal';
+import Gallery from './components/Gallery';
 import { coverStyle, frameOf, layer } from '../common/frame';
 
 const t = (key) => app.translator.trans(`ernestdefoe-backdrop.admin.${key}`);
@@ -25,7 +26,9 @@ export const extend = [
     .setting(() => ({ setting: key('on_directory'), type: 'boolean', label: t('on_directory'), help: t('on_directory_help') }))
     .setting(() => ({ setting: key('max_size'), type: 'number', min: 64, max: 20480, label: t('max_size'), help: t('max_size_help') }))
     .customSetting(() => <DefaultCover />)
-    .permission(() => ({ icon: 'fas fa-panorama', label: t('permission'), permission: key('set') }), 'start'),
+    .customSetting(() => <Gallery />)
+    .permission(() => ({ icon: 'fas fa-images', label: t('permission_choose'), permission: key('choose') }), 'start')
+    .permission(() => ({ icon: 'fas fa-upload', label: t('permission_upload'), permission: key('set') }), 'start'),
 ];
 
 // The default cover is saved by its own endpoint as soon as it is changed, not

@@ -172,6 +172,145 @@ class BackdropTest extends TestCase
         $this->assertSame(403, $this->upload(2, 2, $this->image())->getStatusCode());
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function addPresets(int $count): array
+    {
+        $presets = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $response = $this->send(
+                $this->request('POST', '/api/backdrop/presets', ['authenticatedAs' => 1])
+                    ->withUploadedFiles(['cover' => $this->image()])
+                    ->withParsedBody(['x' => '30', 'y' => '40', 'zoom' => '1.1'])
+            );
+            $this->assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+            $presets = json_decode((string) $response->getBody(), true)['data'];
+        }
+
+        return $presets;
+    }
+
+    private function choose(int $userId, int $as, array $body): ResponseInterface
+    {
+        return $this->send($this->request('POST', "/api/users/$userId/backdrop/preset", ['authenticatedAs' => $as, 'json' => $body]));
+    }
+
+    #[Test]
+    public function members_choose_from_the_gallery_and_keep_their_own_framing(): void
+    {
+        [$first, $second] = $this->addPresets(2);
+        $this->assertSame(['x' => 30, 'y' => 40, 'zoom' => 1.1], array_intersect_key($first, ['x' => 0, 'y' => 0, 'zoom' => 0]));
+
+        // Members can list it; guests cannot.
+        $listed = json_decode((string) $this->send($this->request('GET', '/api/backdrop/presets', ['authenticatedAs' => 2]))->getBody(), true)['data'];
+        $this->assertSame([$first['id'], $second['id']], array_column($listed, 'id'));
+        $this->assertSame(401, $this->send($this->request('GET', '/api/backdrop/presets'))->getStatusCode());
+
+        // Choosing with no frame takes the gallery's.
+        $response = $this->choose(2, 2, ['preset' => $first['id']]);
+        $this->assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $cover = $this->coverIn($response);
+        $this->assertSame($first['id'], $cover['preset']);
+        $this->assertSame($first['url'], $cover['url']);
+        $this->assertSame(1.1, (float) $cover['zoom']);
+
+        // Two members share one file, framed differently.
+        $cover = $this->coverIn($this->choose(3, 3, ['preset' => $first['id'], 'x' => 90, 'zoom' => 2]));
+        $this->assertSame([90.0, 40.0, 2.0], [(float) $cover['x'], (float) $cover['y'], (float) $cover['zoom']]);
+        $this->assertSame(User::find(2)->backdrop_cover, User::find(3)->backdrop_cover);
+
+        // Removing your cover never deletes the shared file.
+        $this->send($this->request('DELETE', '/api/users/2/backdrop', ['authenticatedAs' => 2]));
+        $this->assertFileExists($this->disk().'/'.User::find(3)->backdrop_cover);
+
+        $this->assertSame(422, $this->choose(2, 2, ['preset' => 'nope'])->getStatusCode());
+    }
+
+    #[Test]
+    public function choosing_a_gallery_cover_deletes_your_uploaded_one(): void
+    {
+        [$preset] = $this->addPresets(1);
+        $this->upload(2, 2, $this->image());
+        $uploaded = User::find(2)->backdrop_cover;
+
+        $this->choose(2, 2, ['preset' => $preset['id']]);
+
+        $this->assertFileDoesNotExist($this->disk().'/'.$uploaded);
+    }
+
+    #[Test]
+    public function the_two_permissions_are_independent(): void
+    {
+        [$preset] = $this->addPresets(1);
+        $db = $this->database();
+
+        // Gallery only: upload refused, choosing allowed.
+        $db->table('group_permission')->where('permission', 'ernestdefoe-backdrop.set')->delete();
+        $this->assertSame(403, $this->upload(2, 2, $this->image())->getStatusCode());
+        $this->assertSame(200, $this->choose(2, 2, ['preset' => $preset['id']])->getStatusCode());
+
+        // Someone else's cover is a moderation action either way.
+        $this->assertSame(403, $this->choose(3, 2, ['preset' => $preset['id']])->getStatusCode());
+        $this->assertSame(200, $this->choose(3, 1, ['preset' => $preset['id']])->getStatusCode());
+    }
+
+    #[Test]
+    public function without_either_permission_you_can_still_frame_or_remove_your_cover(): void
+    {
+        [$preset] = $this->addPresets(1);
+        $this->database()->table('users')->where('id', 2)->update(['backdrop_cover' => 'presets/'.$preset['id'].'.webp']);
+        $this->database()->table('group_permission')->whereIn('permission', ['ernestdefoe-backdrop.set', 'ernestdefoe-backdrop.choose'])->delete();
+
+        $this->assertSame(403, $this->choose(2, 2, ['preset' => $preset['id']])->getStatusCode());
+        $this->assertSame(403, $this->upload(2, 2, $this->image())->getStatusCode());
+        $this->assertSame(200, $this->send($this->request('PATCH', '/api/users/2/backdrop', ['authenticatedAs' => 2, 'json' => ['x' => 10]]))->getStatusCode());
+        $this->assertSame(200, $this->send($this->request('DELETE', '/api/users/2/backdrop', ['authenticatedAs' => 2]))->getStatusCode());
+        $this->assertNull(User::find(2)->backdrop_cover);
+    }
+
+    #[Test]
+    public function admins_reorder_reframe_and_delete_gallery_covers(): void
+    {
+        [$a, $b, $c] = $this->addPresets(3);
+        $send = fn (string $method, string $path, array $json = [], int $as = 1) => $this->send(
+            $this->request($method, '/api/backdrop/presets'.$path, ['authenticatedAs' => $as, 'json' => $json])
+        );
+        $ids = fn (ResponseInterface $r) => array_column(json_decode((string) $r->getBody(), true)['data'], 'id');
+
+        $this->assertSame(403, $send('PUT', '', ['order' => [$c['id']]], 2)->getStatusCode());
+        $this->assertSame([$c['id'], $a['id'], $b['id']], $ids($send('PUT', '', ['order' => [$c['id'], $a['id']]])));
+
+        $framed = json_decode((string) $send('PATCH', '/'.$b['id'], ['x' => 5, 'y' => 6, 'zoom' => 3])->getBody(), true)['data'];
+        $this->assertSame(3, $framed[2]['zoom']);
+
+        $this->choose(2, 2, ['preset' => $a['id']]);
+        $file = User::find(2)->backdrop_cover;
+
+        $this->assertSame([$c['id'], $b['id']], $ids($send('DELETE', '/'.$a['id'])));
+        $this->assertNull(User::find(2)->backdrop_cover);
+        $this->assertFileDoesNotExist($this->disk().'/'.$file);
+        $this->assertSame(422, $send('DELETE', '/'.$a['id'])->getStatusCode());
+    }
+
+    #[Test]
+    public function only_admins_add_gallery_covers_and_the_gallery_has_a_limit(): void
+    {
+        $response = $this->send(
+            $this->request('POST', '/api/backdrop/presets', ['authenticatedAs' => 2])->withUploadedFiles(['cover' => $this->image()])
+        );
+        $this->assertSame(403, $response->getStatusCode());
+
+        $full = array_map(fn ($i) => ['id' => "p$i", 'file' => "presets/p$i.webp", 'x' => 50, 'y' => 50, 'zoom' => 1], range(1, 24));
+        $this->app()->getContainer()->make(\Flarum\Settings\SettingsRepositoryInterface::class)->set('ernestdefoe-backdrop.presets', json_encode($full));
+
+        $response = $this->send(
+            $this->request('POST', '/api/backdrop/presets', ['authenticatedAs' => 1])->withUploadedFiles(['cover' => $this->image()])
+        );
+        $this->assertSame(422, $response->getStatusCode());
+    }
+
     #[Test]
     public function bad_input_is_refused(): void
     {
@@ -217,7 +356,14 @@ class BackdropTest extends TestCase
 
         foreach ($users as $user) {
             $this->assertStringEndsWith('c'.$user['id'].'.webp', $user['attributes']['backdrop']['url']);
-            $this->assertSame($user['id'] === '2', $user['attributes']['canEditBackdrop']);
+
+            // Abilities are only worked out for yourself (or by a moderator).
+            if ($user['id'] === '2') {
+                $this->assertTrue($user['attributes']['canUploadBackdrop']);
+                $this->assertTrue($user['attributes']['canChooseBackdrop']);
+            } else {
+                $this->assertArrayNotHasKey('canUploadBackdrop', $user['attributes']);
+            }
         }
     }
 
@@ -233,7 +379,8 @@ class BackdropTest extends TestCase
         );
 
         $user = json_decode((string) $this->send($this->request('GET', '/api/users/2'))->getBody(), true);
-        $this->assertArrayNotHasKey('canEditBackdrop', $user['data']['attributes']);
+        $this->assertArrayNotHasKey('canUploadBackdrop', $user['data']['attributes']);
+        $this->assertArrayNotHasKey('canChooseBackdrop', $user['data']['attributes']);
         // An imported URL is served as it is, for both sizes.
         $this->assertSame('https://cdn.example/x.jpg', $user['data']['attributes']['backdrop']['small']);
     }

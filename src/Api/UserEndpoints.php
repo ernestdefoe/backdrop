@@ -26,6 +26,16 @@ class UserEndpoints
                     (array) $context->request->getParsedBody(),
                 )),
 
+            // JSON: preset (a gallery id) plus optional x, y and zoom.
+            Endpoint\Endpoint::make('backdrop.choose')
+                ->route('POST', '/{id}/backdrop/preset')
+                ->authenticated()
+                ->action(fn (Context $context) => resolve(Covers::class)->choose(
+                    $context->getActor(),
+                    $context->model,
+                    (array) $context->request->getParsedBody(),
+                )),
+
             // JSON: x, y and zoom. Moves the existing cover without re-uploading.
             Endpoint\Endpoint::make('backdrop.frame')
                 ->route('PATCH', '/{id}/backdrop')

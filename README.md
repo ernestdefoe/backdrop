@@ -2,19 +2,20 @@
 
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Latest Stable Version](https://img.shields.io/packagist/v/ernestdefoe/backdrop.svg)](https://packagist.org/packages/ernestdefoe/backdrop)
 
-Profile covers for [Flarum 2](https://flarum.org). Members upload an image, drag it to frame it and zoom, and it shows on their profile, on hover cards and in the member directory.
+Profile covers for [Flarum 2](https://flarum.org). Members pick a cover from a gallery you curate, or upload their own, then drag it to frame it and zoom. It shows on their profile, on hover cards and in the member directory.
 
 Backdrop is built to sit quietly beside your other extensions: it adds to two of core's own methods and nothing else. It does not patch the app, override core components, add classes to `<body>`, restyle other extensions, or add queries to anyone else's pages.
 
 ## Features
 
+- **A cover gallery.** Upload up to 24 covers at once in the admin, frame each one, and drag them into the order members see. Members choose one and can still frame it their own way. Each gallery image is stored once, however many members use it. Delete one and its members fall back to the default cover.
 - **Upload and frame.** Drag the image to choose what shows, zoom from 0.5× to 4× with the slider, the scroll wheel or `+` / `-`, and move it with the arrow keys. Below 1× the edges are filled with a blurred copy of the image. Reframe at any time without uploading again.
 - **Everywhere a profile card appears:** the profile, hover cards on posts, and [FoF User Directory](https://github.com/FriendsOfFlarum/user-directory). Small cards get a lighter copy of the image.
 - **A default cover** for members who have not set one, chosen and framed in the admin.
 - **A readability shade** (gradient, even darken or none) so names and stats stay legible on bright photos.
 - **Light on your server.** Uploads are stored as WebP (animated GIFs stay GIFs), at most 1920px wide, plus a 960px copy for cards. JPEG, PNG, WebP and GIF are accepted; size is checked before an image is decoded.
 - **No extra dependencies.** Files go on Backdrop's own disk (`public/assets/backdrop`), so FoF Upload is not required, and any storage driver that can serve a Flarum disk can serve it.
-- **Moderation.** Members need the *Set own profile cover* permission (given to Members on install). Changing someone else's cover needs core's *Edit users* permission. Uploads are limited to six a minute per member.
+- **Permissions, in Flarum's own grid.** *Choose a profile cover from the gallery* and *Upload own profile cover* are separate, and both go to Members on install. Grant them to any groups you like: revoke uploading for a gallery-only forum, or keep uploads for a supporters group. A member who loses both can still frame or remove the cover they have. Changing someone else's cover needs core's *Edit users* permission. Uploads are limited to six a minute per member.
 
 ## Installation
 

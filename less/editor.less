@@ -73,3 +73,41 @@
     margin-left: auto;
   }
 }
+
+.BackdropGallery {
+  margin-top: 20px;
+}
+
+.BackdropGallery-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--muted-color);
+}
+
+.BackdropGallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.BackdropGallery-item {
+  aspect-ratio: 16 / 7;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--border-radius);
+  background-color: var(--control-bg);
+  background-size: cover;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--control-color);
+  }
+
+  &:focus-visible,
+  &.is-selected {
+    border-color: var(--primary-color);
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}

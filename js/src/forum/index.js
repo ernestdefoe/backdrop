@@ -58,7 +58,10 @@ app.initializers.add('ernestdefoe-backdrop', () => {
   });
 
   extend(UserControls, 'userControls', (items, user) => {
-    if (!user.attribute('canEditBackdrop')) return;
+    const canSet = user.attribute('canUploadBackdrop') || user.attribute('canChooseBackdrop');
+
+    // Without either permission you can still frame or remove a cover you have.
+    if (!canSet && !(user.attribute('backdrop') && user === app.session.user)) return;
 
     items.add(
       'backdrop',
@@ -79,7 +82,12 @@ function openEditor(user) {
   app.modal.show(CoverModal, {
     title: app.translator.trans('ernestdefoe-backdrop.forum.edit_cover'),
     cover: user.attribute('backdrop'),
+    canUpload: !!user.attribute('canUploadBackdrop'),
+    loadPresets: user.attribute('canChooseBackdrop')
+      ? () => app.request({ method: 'GET', url: `${app.forum.attribute('apiUrl')}/backdrop/presets` }).then((r) => r.data)
+      : undefined,
     upload: (body) => send('POST', body),
+    choose: (body) => app.request({ method: 'POST', url: `${url}/preset`, body }).then((payload) => app.store.pushPayload(payload)),
     reframe: (frame) => send('PATCH', frame),
     remove: () => send('DELETE'),
   });

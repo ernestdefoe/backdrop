@@ -18,6 +18,14 @@ class UserFields
      */
     public function __invoke(): array
     {
+        // Only you, or a moderator, can ever hold these abilities; for every
+        // other user in a list the policy is not asked at all.
+        $mayHaveAbilities = function (User $user, Context $context): bool {
+            $actor = $context->getActor();
+
+            return ! $actor->isGuest() && ($actor->id === $user->id || $actor->hasPermission('user.edit'));
+        };
+
         return [
             Schema\Attribute::make('backdrop')
                 ->get(function (User $user) {
@@ -33,12 +41,17 @@ class UserFields
                         'x' => (float) $user->backdrop_x,
                         'y' => (float) $user->backdrop_y,
                         'zoom' => (float) $user->backdrop_zoom,
+                        'preset' => CoverStore::isPreset($user->backdrop_cover) ? pathinfo($user->backdrop_cover, PATHINFO_FILENAME) : null,
                     ];
                 }),
 
-            Schema\Boolean::make('canEditBackdrop')
-                ->visible(fn (User $user, Context $context) => ! $context->getActor()->isGuest())
-                ->get(fn (User $user, Context $context) => $context->getActor()->can('editBackdrop', $user)),
+            Schema\Boolean::make('canUploadBackdrop')
+                ->visible($mayHaveAbilities)
+                ->get(fn (User $user, Context $context) => $context->getActor()->can('uploadBackdrop', $user)),
+
+            Schema\Boolean::make('canChooseBackdrop')
+                ->visible($mayHaveAbilities)
+                ->get(fn (User $user, Context $context) => $context->getActor()->can('chooseBackdrop', $user)),
         ];
     }
 }

@@ -8,8 +8,8 @@ use Flarum\User\User;
 use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * Setting, reframing and removing a member's cover. Every write is checked
- * against the `editBackdrop` ability here, so no endpoint can forget to.
+ * Setting, choosing, reframing and removing a member's cover. Every write is
+ * checked against the matching ability here, so no endpoint can forget to.
  */
 class Covers
 {
@@ -17,6 +17,7 @@ class Covers
         protected CoverStore $store,
         protected CoverValidator $validator,
         protected TranslatorInterface $translator,
+        protected Presets $presets,
     ) {
     }
 
@@ -25,7 +26,7 @@ class Covers
      */
     public function upload(User $actor, User $user, ?UploadedFileInterface $file, array $input): User
     {
-        $actor->assertCan('editBackdrop', $user);
+        $actor->assertCan('uploadBackdrop', $user);
 
         if (! $file) {
             throw new ValidationException(['cover' => $this->translator->trans('ernestdefoe-backdrop.api.no_file')]);
@@ -40,6 +41,31 @@ class Covers
         $user->save();
 
         $this->store->delete($previous);
+
+        return $user;
+    }
+
+    /**
+     * Point the member at a gallery cover. Without a frame of their own they
+     * get the one the admin chose for it.
+     *
+     * @param array<string, mixed> $input
+     */
+    public function choose(User $actor, User $user, array $input): User
+    {
+        $actor->assertCan('chooseBackdrop', $user);
+
+        $preset = $this->presets->find($input['preset'] ?? null);
+        $frame = Frame::fromInput(array_merge($preset, array_filter($input, fn ($v) => $v !== null && $v !== '')));
+
+        $previous = $user->backdrop_cover;
+        $user->backdrop_cover = $preset['file'];
+        $this->applyFrame($user, $frame);
+        $user->save();
+
+        if ($previous !== $preset['file']) {
+            $this->store->delete($previous);
+        }
 
         return $user;
     }

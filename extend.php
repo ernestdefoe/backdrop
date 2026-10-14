@@ -2,6 +2,7 @@
 
 use Ernestdefoe\Backdrop\Access\UserPolicy;
 use Ernestdefoe\Backdrop\Api\DefaultCoverController;
+use Ernestdefoe\Backdrop\Api\PresetsController;
 use Ernestdefoe\Backdrop\Api\UserEndpoints;
 use Ernestdefoe\Backdrop\Api\UserFields;
 use Ernestdefoe\Backdrop\Console\ImportCommand;
@@ -67,7 +68,12 @@ return [
     (new Extend\Routes('api'))
         ->post('/backdrop/default', 'backdrop.default.upload', DefaultCoverController::class)
         ->patch('/backdrop/default', 'backdrop.default.frame', DefaultCoverController::class)
-        ->delete('/backdrop/default', 'backdrop.default.remove', DefaultCoverController::class),
+        ->delete('/backdrop/default', 'backdrop.default.remove', DefaultCoverController::class)
+        ->get('/backdrop/presets', 'backdrop.presets.index', PresetsController::class)
+        ->post('/backdrop/presets', 'backdrop.presets.create', PresetsController::class)
+        ->put('/backdrop/presets', 'backdrop.presets.order', PresetsController::class)
+        ->patch('/backdrop/presets/{id}', 'backdrop.presets.frame', PresetsController::class)
+        ->delete('/backdrop/presets/{id}', 'backdrop.presets.remove', PresetsController::class),
 
     (new Extend\Console())
         ->command(ImportCommand::class),
