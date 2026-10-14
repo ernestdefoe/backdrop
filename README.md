@@ -15,7 +15,7 @@ Backdrop is built to sit quietly beside your other extensions: it adds to two of
 - **Everywhere a profile card appears:** the profile, hover cards on posts, and [FoF User Directory](https://github.com/FriendsOfFlarum/user-directory). Small cards get a lighter copy of the image.
 - **A default cover** for members who have not set one, chosen and framed in the admin.
 - **A readability shade** (gradient, even darken or none) so names and stats stay legible on bright photos.
-- **Light on your server.** Uploads are stored as WebP (animated GIFs stay GIFs), at most 1920px wide, plus a 960px copy for cards. JPEG, PNG, WebP and GIF are accepted; size is checked before an image is decoded.
+- **Light on your server.** Uploads are stored as WebP, at most 1920px wide and 4096px tall, plus a 960px copy for cards. Animated GIFs stay animated, up to 8 million pixels across all their frames. JPEG, PNG, WebP and GIF are accepted, and size, dimensions and frame count are all checked before an image is decoded.
 - **No extra dependencies.** Files go on Backdrop's own disk (`public/assets/backdrop`), so FoF Upload is not required, and any storage driver that can serve a Flarum disk can serve it.
 - **Permissions, in Flarum's own grid.** *Choose a profile cover from the gallery* and *Upload own profile cover* are separate, and both go to Members on install. Grant them to any groups you like: revoke uploading for a gallery-only forum, or keep uploads for a supporters group. A member who loses both can still frame or remove the cover they have. Changing someone else's cover needs core's *Edit users* permission. Uploads are limited to six a minute per member.
 
