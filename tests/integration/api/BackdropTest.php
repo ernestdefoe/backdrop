@@ -107,6 +107,19 @@ class BackdropTest extends TestCase
     }
 
     #[Test]
+    public function the_legacy_import_runs_after_every_other_migration(): void
+    {
+        // The import writes every Backdrop column. In 1.0.0 it ran before the
+        // FoF Upload columns existed, and enabling over Cover Studio failed.
+        $migrations = glob(__DIR__.'/../../../migrations/*.php');
+        sort($migrations);
+
+        $importing = array_values(array_filter($migrations, fn ($file) => str_contains(file_get_contents($file), 'LegacyImport::class)->import()')));
+
+        $this->assertSame([end($migrations)], $importing);
+    }
+
+    #[Test]
     public function a_member_sets_frames_and_removes_their_own_cover(): void
     {
         $response = $this->upload(2, 2, $this->image(), ['x' => '20', 'y' => '80', 'zoom' => '1.5']);
