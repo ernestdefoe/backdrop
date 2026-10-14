@@ -179,11 +179,34 @@ class BackdropTest extends TestCase
         return new UploadedFile($path, strlen($data), UPLOAD_ERR_OK, 'cover.gif', 'image/gif');
     }
 
+    private function gifFrom(string $data): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'backdrop').'.gif';
+        file_put_contents($path, $data);
+        $this->temp[] = $path;
+
+        return new UploadedFile($path, strlen($data), UPLOAD_ERR_OK, 'cover.gif', 'image/gif');
+    }
+
     #[Test]
     public function animated_gifs_stay_animated_but_costly_ones_are_refused_before_decoding(): void
     {
         // 20 frames of 1500x1500 is a few KB of file and 45 million pixels of work.
         $this->assertSame(422, $this->upload(2, 2, $this->gif(1500, 1500, 20))->getStatusCode());
+
+        // The same animation with bytes after its first frame that make a
+        // spec-following block walk stop there (one frame, cheap), while the
+        // decoder still reads all twenty.
+        $plain = $this->gif(1500, 1500, 20);
+        $data = (string) file_get_contents($plain->getStream()->getMetadata('uri'));
+        $at = strpos($data, "\x21\xF9\x04", strpos($data, "\x21\xF9\x04") + 1);
+        $crafted = substr($data, 0, $at)."\x21\xF9\x00\x21\x00\x00\x3B\x00".substr($data, $at);
+        $this->assertSame(1, CoverValidator::gifFrames($crafted));
+        $this->assertSame(422, $this->upload(2, 2, $this->gifFrom($crafted))->getStatusCode());
+
+        // And a GIF with no frames at all.
+        $this->assertSame(422, $this->upload(2, 2, $this->gifFrom("GIF89a\x01\x00\x01\x00\x00\x00\x00;"))->getStatusCode());
+        $this->assertNull(User::find(2)->backdrop_cover);
 
         $this->assertSame(200, $this->upload(2, 2, $this->gif(400, 200, 5))->getStatusCode());
         $stored = User::find(2)->backdrop_cover;

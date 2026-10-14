@@ -6,6 +6,8 @@ Profile covers for [Flarum 2](https://flarum.org). Members pick a cover from a g
 
 Backdrop is built to sit quietly beside your other extensions: it adds to two of core's own methods and nothing else. It does not patch the app, override core components, add classes to `<body>`, restyle other extensions, or add queries to anyone else's pages.
 
+![A profile with its cover](.github/screenshots/profile.png)
+
 ## Features
 
 - **A cover gallery.** Upload up to 24 covers at once in the admin, frame each one, and drag them into the order members see. Members choose one and can still frame it their own way. Each gallery image is stored once, however many members use it. Delete one and its members fall back to the default cover.
@@ -16,6 +18,12 @@ Backdrop is built to sit quietly beside your other extensions: it adds to two of
 - **Light on your server.** Uploads are stored as WebP (animated GIFs stay GIFs), at most 1920px wide, plus a 960px copy for cards. JPEG, PNG, WebP and GIF are accepted; size is checked before an image is decoded.
 - **No extra dependencies.** Files go on Backdrop's own disk (`public/assets/backdrop`), so FoF Upload is not required, and any storage driver that can serve a Flarum disk can serve it.
 - **Permissions, in Flarum's own grid.** *Choose a profile cover from the gallery* and *Upload own profile cover* are separate, and both go to Members on install. Grant them to any groups you like: revoke uploading for a gallery-only forum, or keep uploads for a supporters group. A member who loses both can still frame or remove the cover they have. Changing someone else's cover needs core's *Edit users* permission. Uploads are limited to six a minute per member.
+
+![Choosing and framing a cover from the gallery](.github/screenshots/editor.png)
+
+![A hover card showing the forum's default cover](.github/screenshots/hover-card.png)
+
+![The settings page, with the default cover and the gallery](.github/screenshots/admin.png)
 
 ## Installation
 

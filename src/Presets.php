@@ -6,6 +6,7 @@ use Flarum\Foundation\ValidationException;
 use Flarum\Locale\TranslatorInterface;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\ConnectionInterface;
 use Psr\Http\Message\UploadedFileInterface;
@@ -172,9 +173,15 @@ class Presets
     {
         $store = $this->cache->getStore();
 
-        return $store instanceof LockProvider
-            ? $store->lock('ernestdefoe-backdrop.presets', 30)->block(10, $callback)
-            : $callback();
+        if (! $store instanceof LockProvider) {
+            return $callback();
+        }
+
+        try {
+            return $store->lock('ernestdefoe-backdrop.presets', 30)->block(10, $callback);
+        } catch (LockTimeoutException) {
+            throw new ValidationException(['cover' => $this->translator->trans('ernestdefoe-backdrop.api.busy')]);
+        }
     }
 
     protected function mutate(callable $change): void

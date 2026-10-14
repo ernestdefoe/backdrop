@@ -4,7 +4,9 @@ namespace Ernestdefoe\Backdrop;
 
 use Flarum\Foundation\AbstractImageValidator;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Intervention\Gif\Decoder as GifDecoder;
 use Psr\Http\Message\UploadedFileInterface;
+use Throwable;
 
 class CoverValidator extends AbstractImageValidator
 {
@@ -38,14 +40,33 @@ class CoverValidator extends AbstractImageValidator
 
         if (str_starts_with($data, 'GIF8')) {
             $size = @getimagesizefromstring($data);
-            $frames = self::gifFrames($data);
+            $frames = self::countFrames($data);
 
-            if (! $size || $frames === null || $frames * $size[0] * $size[1] > self::MAX_ANIMATION_PIXELS) {
+            if (! $size || ! $frames || $frames * $size[0] * $size[1] > self::MAX_ANIMATION_PIXELS) {
                 $this->raise('dimensions');
             }
         }
 
         parent::assertFileMimes($file);
+    }
+
+    /**
+     * Two independent counts, and the larger one wins. The decoder's own GIF
+     * parser is the one that matters, since it decides what gets decoded: it
+     * reads some blocks differently from the spec, so a file crafted to make
+     * a spec-following walk stop early still has every frame decoded. The
+     * walk stays as a second opinion for any other decoder. Neither decodes
+     * pixels. Null (refused) when the file is not a GIF either can read.
+     */
+    public static function countFrames(string $data): ?int
+    {
+        try {
+            $decoded = count(GifDecoder::decode($data)->getFrames());
+        } catch (Throwable) {
+            return null;
+        }
+
+        return max($decoded, self::gifFrames($data) ?? 0) ?: null;
     }
 
     /**

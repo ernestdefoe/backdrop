@@ -34,6 +34,7 @@ ernestdefoe-backdrop:
     no_cover: There is no cover to reposition.
     unknown_preset: That cover is no longer in the gallery.
     gallery_full: "The gallery holds up to {max} covers."
+    busy: The gallery is being changed. Please try again in a moment.
 
   forum:
     edit_cover: Edit cover
@@ -49,6 +50,5 @@ ernestdefoe-backdrop:
       upload_own: Upload your own
       gallery: Gallery
       gallery_label: Choose a cover from the gallery
-      replace: Choose another image
       remove: Remove cover
       save: Save
