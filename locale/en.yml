@@ -10,6 +10,8 @@ ernestdefoe-backdrop:
     on_cards: Show covers on hover cards
     on_directory: Show covers in the member directory
     on_directory_help: For forums running FoF User Directory.
+    use_fof_upload: Store member uploads with FoF Upload
+    use_fof_upload_help: "When FoF Upload is enabled, a member's cover goes through it like their other images: its storage, resizing, watermark and WebP thumbnails, and it appears in their My Media. Members FoF Upload does not let upload images, and forums without it, use Backdrop's own storage."
     max_size: Largest upload (KB)
     max_size_help: Covers are resized to 1920px wide when they are stored, so a large photo still loads quickly.
     default: Default cover

@@ -22,3 +22,4 @@
 - Run the suite on SQLite, Postgres and MySQL, each from a fresh `composer test:setup`, with and without `DB_PREFIX`. CI does.
 - MySQL commits DDL immediately, ending the test's transaction: a test that creates tables or columns must undo everything it wrote in `tearDown` (see the legacy-schema cleanup in `BackdropTest`).
 - A MariaDB server needs Flarum's `mariadb` driver, not `mysql`; with `mysql`, core's notification query fails on `CAST(... AS JSON)`.
+- FoF Upload is optional. `FofUpload::store()` dispatches FoF Upload's own `Upload` command (so its permission, mime config, adapter, resize, watermark and thumbnails all apply) and returns null whenever it cannot, so Backdrop stores the cover itself. Never reference FoF Upload classes outside that class or a `Conditional` extender: forums without it must boot. Its files are never deleted by Backdrop; deleting one in My Media clears the cover (`DetachDeletedFofFile`).

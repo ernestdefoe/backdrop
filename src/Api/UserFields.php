@@ -37,7 +37,7 @@ class UserFields
 
                     return [
                         'url' => $store->url($user->backdrop_cover),
-                        'small' => $store->url($user->backdrop_cover, true),
+                        'small' => $user->backdrop_small ?: $store->url($user->backdrop_cover, true),
                         'x' => (float) $user->backdrop_x,
                         'y' => (float) $user->backdrop_y,
                         'zoom' => (float) $user->backdrop_zoom,

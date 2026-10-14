@@ -16,7 +16,7 @@ Backdrop is built to sit quietly beside your other extensions: it adds to two of
 - **A default cover** for members who have not set one, chosen and framed in the admin.
 - **A readability shade** (gradient, even darken or none) so names and stats stay legible on bright photos.
 - **Light on your server.** Uploads are stored as WebP, at most 1920px wide and 4096px tall, plus a 960px copy for cards. Animated GIFs stay animated, up to 8 million pixels across all their frames. JPEG, PNG, WebP and GIF are accepted, and size, dimensions and frame count are all checked before an image is decoded.
-- **No extra dependencies.** Files go on Backdrop's own disk (`public/assets/backdrop`), so FoF Upload is not required, and any storage driver that can serve a Flarum disk can serve it.
+- **Works with FoF Upload, or without it.** When [FoF Upload](https://github.com/FriendsOfFlarum/upload) is enabled, a member's cover goes through it like their other images: its storage (local, S3 and the rest), resizing, watermark and WebP thumbnails, and the cover appears in their My Media. Deleting it there removes the cover. Forums without FoF Upload, and members it does not let upload images, use Backdrop's own storage (`public/assets/backdrop`). An admin setting turns the FoF Upload route off. Gallery and default covers are site assets and always use Backdrop's storage.
 - **Permissions, in Flarum's own grid.** *Choose a profile cover from the gallery* and *Upload own profile cover* are separate, and both go to Members on install. Grant them to any groups you like: revoke uploading for a gallery-only forum, or keep uploads for a supporters group. A member who loses both can still frame or remove the cover they have. Changing someone else's cover needs core's *Edit users* permission. Uploads are limited to six a minute per member.
 
 ![Choosing and framing a cover from the gallery](.github/screenshots/editor.png)
@@ -60,7 +60,7 @@ php flarum cache:clear
 php flarum backdrop:import
 ```
 
-Enabling Backdrop brings every cover across straight away, still served from where it was. Step 3 then copies the files that are on your server onto Backdrop's storage, so nothing depends on the old extension or on FoF Upload any more. It is safe to run more than once.
+Enabling Backdrop brings every cover across straight away, still served from where it was. Cover Studio's covers are FoF Upload files, so while FoF Upload stays enabled they stay there, in each member's My Media, with their WebP thumbnails. Step 3 copies everything else that is on your server (sycho's covers, or Cover Studio's if you remove FoF Upload) onto Backdrop's storage. It is safe to run more than once.
 
 Nothing is deleted: the old extension's tables, columns and files are left exactly as they were, and a member who already has a Backdrop cover is never overwritten. Covers held on remote storage (S3 and the like) keep working from their URL.
 
@@ -75,7 +75,7 @@ Remove the old extension before installing Backdrop. Composer will refuse to ins
 | Classes on `<body>` | **No.** Everything is scoped to `.UserCard.Backdrop`, which only cards with a cover get. |
 | Restyles other extensions | **No.** |
 | Adds a global query scope to `User` | **No.** Cover data is four columns on `users`, like core's own avatar, so it arrives with the row every page already loads. |
-| Requires FoF Upload | **No.** |
+| Requires FoF Upload | **No.** It uses FoF Upload when it is there, and its own storage when it is not. |
 
 ## For theme authors
 

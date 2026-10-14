@@ -18,6 +18,7 @@ class Covers
         protected CoverValidator $validator,
         protected TranslatorInterface $translator,
         protected Presets $presets,
+        protected FofUpload $fof,
     ) {
     }
 
@@ -36,10 +37,25 @@ class Covers
         $frame = Frame::fromInput($input);
 
         $previous = $user->backdrop_cover;
+
+        // FoF Upload's file stays in the member's media whatever happens here,
+        // like every other file they upload there.
+        if ($viaFof = $this->fof->store($file, $actor, $user)) {
+            $user->backdrop_cover = $viaFof['url'];
+            $user->backdrop_small = $viaFof['small'];
+            $user->backdrop_file_id = $viaFof['file'];
+            $this->applyFrame($user, $frame);
+            $user->save();
+            $this->store->delete($previous);
+
+            return $user;
+        }
+
         $stored = $this->store->store($file);
 
         try {
             $user->backdrop_cover = $stored;
+            $this->clearFofLink($user);
             $this->applyFrame($user, $frame);
             $user->save();
         } catch (\Throwable $e) {
@@ -70,6 +86,7 @@ class Covers
 
             $previous = $user->backdrop_cover;
             $user->backdrop_cover = $preset['file'];
+            $this->clearFofLink($user);
             $this->applyFrame($user, $frame);
             $user->save();
 
@@ -107,12 +124,21 @@ class Covers
 
         $previous = $user->backdrop_cover;
         $user->backdrop_cover = null;
+        $this->clearFofLink($user);
         $this->applyFrame($user, new Frame());
         $user->save();
 
         $this->store->delete($previous);
 
         return $user;
+    }
+
+    // The cover no longer comes from a FoF Upload file (which stays in the
+    // member's media).
+    protected function clearFofLink(User $user): void
+    {
+        $user->backdrop_small = null;
+        $user->backdrop_file_id = null;
     }
 
     protected function applyFrame(User $user, Frame $frame): void

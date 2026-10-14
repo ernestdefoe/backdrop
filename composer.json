@@ -52,12 +52,16 @@
                 "name": "fas fa-panorama",
                 "backgroundColor": "#0f766e",
                 "color": "#fff"
-            }
+            },
+            "optional-dependencies": [
+                "fof-upload"
+            ]
         }
     },
     "require-dev": {
         "flarum/phpstan": "^2.0",
-        "flarum/testing": "^2.0"
+        "flarum/testing": "^2.0",
+        "fof/upload": "^2.0"
     },
     "scripts": {
         "test": [
@@ -74,5 +78,8 @@
         "analyse:phpstan": "Run static analysis"
     },
     "minimum-stability": "beta",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "suggest": {
+        "fof/upload": "Member covers then go through FoF Upload: its storage, resizing, watermark and WebP thumbnails, in their My Media."
+    }
 }

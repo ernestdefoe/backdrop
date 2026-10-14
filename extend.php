@@ -8,6 +8,7 @@ use Ernestdefoe\Backdrop\Api\UserFields;
 use Ernestdefoe\Backdrop\Console\ImportCommand;
 use Ernestdefoe\Backdrop\CoverStore;
 use Ernestdefoe\Backdrop\DeleteCoverWithUser;
+use Ernestdefoe\Backdrop\DetachDeletedFofFile;
 use Ernestdefoe\Backdrop\Settings;
 use Ernestdefoe\Backdrop\UploadThrottler;
 use Flarum\Api\Resource\ForumResource;
@@ -44,7 +45,8 @@ return [
         ->default(Settings::HEIGHT_MOBILE, 160)
         ->default(Settings::OVERLAY, 'gradient')
         ->default(Settings::ON_CARDS, true)
-        ->default(Settings::ON_DIRECTORY, true),
+        ->default(Settings::ON_DIRECTORY, true)
+        ->default(Settings::USE_FOF_UPLOAD, true),
 
     (new Extend\ApiResource(ForumResource::class))
         ->fields(fn () => [
@@ -57,7 +59,9 @@ return [
         ->cast('backdrop_cover', 'string')
         ->cast('backdrop_x', 'float')
         ->cast('backdrop_y', 'float')
-        ->cast('backdrop_zoom', 'float'),
+        ->cast('backdrop_zoom', 'float')
+        ->cast('backdrop_small', 'string')
+        ->cast('backdrop_file_id', 'int'),
 
     (new Extend\ApiResource(UserResource::class))
         ->fields(UserFields::class)
@@ -68,6 +72,12 @@ return [
 
     (new Extend\Event())
         ->listen(Deleted::class, DeleteCoverWithUser::class),
+
+    // By event name, so nothing here needs FoF Upload's classes to exist.
+    (new Extend\Conditional())
+        ->whenExtensionEnabled('fof-upload', fn () => [
+            (new Extend\Event())->listen('eloquent.deleting: FoF\\Upload\\File', DetachDeletedFofFile::class),
+        ]),
 
     (new Extend\ThrottleApi())
         ->set('backdrop-uploads', UploadThrottler::class),

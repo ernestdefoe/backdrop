@@ -19,6 +19,7 @@ class Settings
     public const DEFAULT = self::PREFIX.'default';
     public const DEFAULT_FRAME = self::PREFIX.'default_frame';
     public const PRESETS = self::PREFIX.'presets';
+    public const USE_FOF_UPLOAD = self::PREFIX.'use_fof_upload';
 
     public const OVERLAYS = ['gradient', 'darken', 'none'];
 

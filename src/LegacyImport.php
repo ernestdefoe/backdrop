@@ -23,8 +23,8 @@ use Throwable;
  *    the first time legacy data is found, never again.
  * 2. localize() — run by `php flarum backdrop:import`. Covers whose file is on
  *    this server are copied onto Backdrop's disk, after which nothing depends
- *    on the old extension or fof/upload. Remote files (S3 and the like) stay
- *    as URLs.
+ *    on the old extension. Remote files (S3 and the like) stay as URLs, and
+ *    while FoF Upload is in use its files stay with it.
  */
 class LegacyImport
 {
@@ -73,10 +73,17 @@ class LegacyImport
     public function localize(CoverStore $store): int
     {
         $count = 0;
-
-        $this->db->table('users')
+        $query = $this->db->table('users')
             ->select(['id', 'backdrop_cover'])
-            ->where('backdrop_cover', 'like', 'http%://%')
+            ->where('backdrop_cover', 'like', 'http%://%');
+
+        // While FoF Upload is in use, a cover that is one of its files stays
+        // there, in the member's My Media.
+        if (resolve(FofUpload::class)->enabled()) {
+            $query->whereNull('backdrop_file_id');
+        }
+
+        $query
             ->orderBy('id')
             ->chunkById(200, function ($rows) use ($store, &$count) {
                 foreach ($rows as $row) {
@@ -87,7 +94,7 @@ class LegacyImport
                     $updated = $this->db->table('users')
                         ->where('id', $row->id)
                         ->where('backdrop_cover', $row->backdrop_cover)
-                        ->update(['backdrop_cover' => $stored]);
+                        ->update(['backdrop_cover' => $stored, 'backdrop_small' => null, 'backdrop_file_id' => null]);
 
                     $updated ? $count++ : $store->delete($stored);
                 }
@@ -116,10 +123,15 @@ class LegacyImport
             ->orderBy('user_id')
             ->chunk(200, function ($rows) use (&$count) {
                 foreach ($rows as $row) {
+                    // Cover Studio's covers are FoF Upload files: keep the link
+                    // and its thumbnail, so My Media stays in charge of them.
                     $count += (int) $this->give((int) $row->user_id, (string) $row->cover_url, [
                         'x' => $row->cover_focus_x,
                         'y' => $row->cover_focus_y,
                         'zoom' => $row->cover_zoom,
+                    ], [
+                        'backdrop_small' => self::isHttp((string) ($row->cover_thumb_url ?? '')) && strlen((string) $row->cover_thumb_url) <= self::MAX_URL ? $row->cover_thumb_url : null,
+                        'backdrop_file_id' => $row->cover_file_id,
                     ]);
                 }
             });
@@ -157,8 +169,9 @@ class LegacyImport
 
     /**
      * @param array<string, mixed> $frame
+     * @param array<string, mixed> $extra
      */
-    protected function give(int $userId, string $url, array $frame): bool
+    protected function give(int $userId, string $url, array $frame, array $extra = []): bool
     {
         if (! self::isHttp($url) || strlen($url) > self::MAX_URL) {
             return false;
@@ -178,7 +191,7 @@ class LegacyImport
                 'backdrop_x' => $frame->x,
                 'backdrop_y' => $frame->y,
                 'backdrop_zoom' => $frame->zoom,
-            ]);
+            ] + $extra);
     }
 
     /**

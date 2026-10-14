@@ -24,6 +24,7 @@ export const extend = [
     }))
     .setting(() => ({ setting: key('on_cards'), type: 'boolean', label: t('on_cards') }))
     .setting(() => ({ setting: key('on_directory'), type: 'boolean', label: t('on_directory'), help: t('on_directory_help') }))
+    .setting(() => ({ setting: key('use_fof_upload'), type: 'boolean', label: t('use_fof_upload'), help: t('use_fof_upload_help') }))
     .setting(() => ({ setting: key('max_size'), type: 'number', min: 64, max: 20480, label: t('max_size'), help: t('max_size_help') }))
     .customSetting(() => <DefaultCover />)
     .customSetting(() => <Gallery />)
