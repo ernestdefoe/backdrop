@@ -1,0 +1,75 @@
+.BackdropModal-empty {
+  display: block;
+  width: 100%;
+  height: 200px;
+  border: 2px dashed var(--control-bg);
+  border-radius: var(--border-radius);
+  background: none;
+  color: var(--muted-color);
+  font-size: 15px;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+}
+
+.BackdropPicker-stage {
+  position: relative;
+  height: 220px;
+  border-radius: var(--border-radius);
+  background: var(--control-bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+
+  &.is-dragging {
+    cursor: grabbing;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
+  @media @phone {
+    height: 160px;
+  }
+}
+
+.BackdropPicker-zoom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-weight: normal;
+
+  input {
+    flex: 1;
+    accent-color: var(--primary-color);
+  }
+
+  output {
+    min-width: 3.5em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted-color);
+  }
+}
+
+.BackdropModal .helpText {
+  margin: 10px 0 0;
+}
+
+.BackdropModal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+
+  .Button--primary {
+    margin-left: auto;
+  }
+}
