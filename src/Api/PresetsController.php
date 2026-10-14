@@ -3,6 +3,7 @@
 namespace Ernestdefoe\Backdrop\Api;
 
 use Ernestdefoe\Backdrop\Presets;
+use Flarum\Http\Exception\MethodNotAllowedException;
 use Flarum\Http\RequestUtil;
 use Illuminate\Support\Arr;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -45,6 +46,7 @@ class PresetsController implements RequestHandlerInterface
                 'PUT' => $this->presets->reorder((array) ($input['order'] ?? [])),
                 'PATCH' => $this->presets->reframe($id, $input),
                 'DELETE' => $this->presets->remove($id),
+                default => throw new MethodNotAllowedException(),
             };
         }
 

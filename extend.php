@@ -52,6 +52,13 @@ return [
                 ->get(fn () => resolve(Settings::class)->forForum()),
         ]),
 
+    // Declared, so the cover columns are typed (and known to static analysis).
+    (new Extend\Model(User::class))
+        ->cast('backdrop_cover', 'string')
+        ->cast('backdrop_x', 'float')
+        ->cast('backdrop_y', 'float')
+        ->cast('backdrop_zoom', 'float'),
+
     (new Extend\ApiResource(UserResource::class))
         ->fields(UserFields::class)
         ->endpoints(UserEndpoints::class),
