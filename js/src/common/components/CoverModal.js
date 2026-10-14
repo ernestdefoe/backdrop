@@ -82,7 +82,16 @@ export default class CoverModal extends Modal {
 
         {this.gallery()}
 
-        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden onchange={(e) => this.choose(e.target.files[0])} />
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          hidden
+          onchange={(e) => {
+            this.choose(e.target.files[0]);
+            // Cleared, so choosing the same file again still fires a change.
+            e.target.value = '';
+          }}
+        />
 
         <div className="BackdropModal-actions">
           {this.canUpload() && (

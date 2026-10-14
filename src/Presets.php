@@ -5,6 +5,8 @@ namespace Ernestdefoe\Backdrop;
 use Flarum\Foundation\ValidationException;
 use Flarum\Locale\TranslatorInterface;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\ConnectionInterface;
 use Psr\Http\Message\UploadedFileInterface;
 
@@ -26,15 +28,21 @@ class Presets
         protected CoverValidator $validator,
         protected TranslatorInterface $translator,
         protected ConnectionInterface $db,
+        protected Cache $cache,
     ) {
     }
 
     /**
      * @return list<array{id: string, file: string, x: float, y: float, zoom: float}>
      */
-    public function all(): array
+    public function all(bool $fresh = false): array
     {
-        $list = json_decode((string) $this->settings->get(Settings::PRESETS), true);
+        // Settings are cached for the request (and in Redis with fof/redis), so
+        // a change made under the lock reads the row itself.
+        $json = $fresh
+            ? $this->db->table('settings')->where('key', Settings::PRESETS)->value('value')
+            : $this->settings->get(Settings::PRESETS);
+        $list = json_decode((string) $json, true);
 
         return is_array($list) ? array_values(array_filter($list, fn ($p) => is_array($p) && isset($p['id'], $p['file']))) : [];
     }
@@ -42,9 +50,9 @@ class Presets
     /**
      * @return array{id: string, file: string, x: float, y: float, zoom: float}
      */
-    public function find(mixed $id): array
+    public function find(mixed $id, bool $fresh = false): array
     {
-        foreach ($this->all() as $preset) {
+        foreach ($this->all($fresh) as $preset) {
             if ($preset['id'] === $id) {
                 return $preset;
             }
@@ -73,22 +81,40 @@ class Presets
      */
     public function add(?UploadedFileInterface $file, array $input): void
     {
-        $list = $this->all();
-
-        if (count($list) >= self::LIMIT) {
-            throw new ValidationException(['cover' => $this->translator->trans('ernestdefoe-backdrop.api.gallery_full', ['max' => self::LIMIT])]);
-        }
-
         if (! $file) {
             throw new ValidationException(['cover' => $this->translator->trans('ernestdefoe-backdrop.api.no_file')]);
         }
 
         $this->validator->assertImageValid('cover', $file);
         $frame = Frame::fromInput($input);
+        $this->assertRoom($this->all());
+
+        // Encoding is the slow part, so it happens outside the lock; the
+        // files are removed again if the gallery cannot take them.
         $stored = $this->store->store($file, CoverStore::PRESETS);
 
-        $list[] = ['id' => pathinfo($stored, PATHINFO_FILENAME), 'file' => $stored] + $frame->toArray();
-        $this->save($list);
+        try {
+            $this->mutate(function (array $list) use ($stored, $frame) {
+                $this->assertRoom($list);
+                $list[] = ['id' => pathinfo($stored, PATHINFO_FILENAME), 'file' => $stored] + $frame->toArray();
+
+                return $list;
+            });
+        } catch (\Throwable $e) {
+            $this->store->delete($stored, true);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $list
+     */
+    protected function assertRoom(array $list): void
+    {
+        if (count($list) >= self::LIMIT) {
+            throw new ValidationException(['cover' => $this->translator->trans('ernestdefoe-backdrop.api.gallery_full', ['max' => self::LIMIT])]);
+        }
     }
 
     /**
@@ -96,10 +122,13 @@ class Presets
      */
     public function reframe(string $id, array $input): void
     {
-        $this->find($id);
         $frame = Frame::fromInput($input);
 
-        $this->save(array_map(fn (array $p) => $p['id'] === $id ? array_merge($p, $frame->toArray()) : $p, $this->all()));
+        $this->mutate(function (array $list) use ($id, $frame) {
+            $this->find($id, true);
+
+            return array_map(fn (array $p) => $p['id'] === $id ? array_merge($p, $frame->toArray()) : $p, $list);
+        });
     }
 
     /**
@@ -107,10 +136,17 @@ class Presets
      */
     public function remove(string $id): void
     {
-        $preset = $this->find($id);
+        $preset = null;
 
-        $this->save(array_values(array_filter($this->all(), fn (array $p) => $p['id'] !== $id)));
-        $this->db->table('users')->where('backdrop_cover', $preset['file'])->update(['backdrop_cover' => null]);
+        $this->mutate(function (array $list) use ($id, &$preset) {
+            $preset = $this->find($id, true);
+            // Inside the lock, so a member choosing this cover right now either
+            // lands before this and is cleared, or after and is refused.
+            $this->db->table('users')->where('backdrop_cover', $preset['file'])->update(['backdrop_cover' => null]);
+
+            return array_values(array_filter($list, fn (array $p) => $p['id'] !== $id));
+        });
+
         $this->store->delete($preset['file'], true);
     }
 
@@ -119,18 +155,32 @@ class Presets
      */
     public function reorder(array $ids): void
     {
-        $list = $this->all();
         $rank = array_flip(array_values(array_filter($ids, 'is_string')));
 
-        usort($list, fn ($a, $b) => ($rank[$a['id']] ?? PHP_INT_MAX) <=> ($rank[$b['id']] ?? PHP_INT_MAX));
-        $this->save($list);
+        $this->mutate(function (array $list) use ($rank) {
+            usort($list, fn ($a, $b) => ($rank[$a['id']] ?? PHP_INT_MAX) <=> ($rank[$b['id']] ?? PHP_INT_MAX));
+
+            return $list;
+        });
     }
 
     /**
-     * @param list<array<string, mixed>> $list
+     * Run a change to the gallery, or to who uses a gallery cover, one at a
+     * time: read the stored list, change it, save it, all under one lock.
      */
-    protected function save(array $list): void
+    public function locked(callable $callback): mixed
     {
-        $this->settings->set(Settings::PRESETS, json_encode(array_values($list)));
+        $store = $this->cache->getStore();
+
+        return $store instanceof LockProvider
+            ? $store->lock('ernestdefoe-backdrop.presets', 30)->block(10, $callback)
+            : $callback();
+    }
+
+    protected function mutate(callable $change): void
+    {
+        $this->locked(function () use ($change) {
+            $this->settings->set(Settings::PRESETS, json_encode(array_values($change($this->all(true)))));
+        });
     }
 }

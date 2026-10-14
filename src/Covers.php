@@ -36,9 +36,17 @@ class Covers
         $frame = Frame::fromInput($input);
 
         $previous = $user->backdrop_cover;
-        $user->backdrop_cover = $this->store->store($file);
-        $this->applyFrame($user, $frame);
-        $user->save();
+        $stored = $this->store->store($file);
+
+        try {
+            $user->backdrop_cover = $stored;
+            $this->applyFrame($user, $frame);
+            $user->save();
+        } catch (\Throwable $e) {
+            $this->store->delete($stored);
+
+            throw $e;
+        }
 
         $this->store->delete($previous);
 
@@ -55,13 +63,19 @@ class Covers
     {
         $actor->assertCan('chooseBackdrop', $user);
 
-        $preset = $this->presets->find($input['preset'] ?? null);
-        $frame = Frame::fromInput(array_merge($preset, array_filter($input, fn ($v) => $v !== null && $v !== '')));
+        // Under the gallery's lock, so the cover cannot be deleted in between.
+        $preset = $this->presets->locked(function () use ($user, $input) {
+            $preset = $this->presets->find($input['preset'] ?? null, true);
+            $frame = Frame::fromInput(array_merge($preset, array_filter($input, fn ($v) => $v !== null && $v !== '')));
 
-        $previous = $user->backdrop_cover;
-        $user->backdrop_cover = $preset['file'];
-        $this->applyFrame($user, $frame);
-        $user->save();
+            $previous = $user->backdrop_cover;
+            $user->backdrop_cover = $preset['file'];
+            $this->applyFrame($user, $frame);
+            $user->save();
+
+            return $preset + ['previous' => $previous];
+        });
+        $previous = $preset['previous'];
 
         if ($previous !== $preset['file']) {
             $this->store->delete($previous);

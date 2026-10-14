@@ -102,6 +102,9 @@ export default class Gallery extends Component {
   async add(files) {
     this.$('input[type=file]')[0].value = '';
     this.busy = true;
+    // No reordering until every upload is in, or an order sent mid-batch
+    // would be built from a gallery that is about to change.
+    this.sortableInstance?.option('disabled', true);
 
     try {
       for (const file of files.slice(0, LIMIT - this.presets.length)) {
@@ -111,6 +114,7 @@ export default class Gallery extends Component {
       }
     } finally {
       this.busy = false;
+      this.sortableInstance?.option('disabled', false);
       m.redraw();
     }
   }

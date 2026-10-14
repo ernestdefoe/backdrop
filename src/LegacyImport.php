@@ -19,7 +19,8 @@ use Throwable;
  * extenders boot, so Backdrop's disk does not exist yet when it is enabled:
  *
  * 1. import() — run by the enable migration. Covers come over as the URLs they
- *    are already served from, so every one shows straight away.
+ *    are already served from, so every one shows straight away. It runs once:
+ *    the first time legacy data is found, never again.
  * 2. localize() — run by `php flarum backdrop:import`. Covers whose file is on
  *    this server are copied onto Backdrop's disk, after which nothing depends
  *    on the old extension or fof/upload. Remote files (S3 and the like) stay
@@ -27,13 +28,17 @@ use Throwable;
  */
 class LegacyImport
 {
+    public const DONE = Settings::PREFIX.'legacy_imported';
+
+    /** The length of users.backdrop_cover. */
+    public const MAX_URL = 1024;
+
     protected Builder $schema;
 
     public function __construct(
         protected ConnectionInterface $db,
         protected SettingsRepositoryInterface $settings,
         protected Paths $paths,
-        protected UrlGenerator $url,
     ) {
         $this->schema = $db->getSchemaBuilder();
     }
@@ -43,10 +48,23 @@ class LegacyImport
      */
     public function import(): array
     {
-        return [
+        $counts = ['coverStudio' => 0, 'sycho' => 0];
+        $sources = $this->schema->hasTable('cover_studio_user_data') || $this->schema->hasColumn('users', 'cover');
+
+        // Once only. After that, a member with no cover may have removed it, or
+        // had their gallery cover deleted, and must not get the old one back.
+        if (! $sources || $this->stored(self::DONE) !== null) {
+            return $counts;
+        }
+
+        $counts = [
             'coverStudio' => $this->fromCoverStudio(),
             'sycho' => $this->fromSycho(),
         ];
+
+        $this->settings->set(self::DONE, '1');
+
+        return $counts;
     }
 
     /**
@@ -119,14 +137,16 @@ class LegacyImport
         }
 
         $count = 0;
-        $base = $this->forumBase().'assets/covers/';
+        $base = null;
 
         $this->db->table('users')
             ->select(['id', 'cover'])
             ->whereNotNull('cover')
             ->where('cover', '!=', '')
             ->orderBy('id')
-            ->chunk(200, function ($rows) use ($base, &$count) {
+            ->chunk(200, function ($rows) use (&$base, &$count) {
+                $base ??= $this->forumBase().'assets/covers/';
+
                 foreach ($rows as $row) {
                     $count += (int) $this->give((int) $row->id, $base.rawurlencode(basename((string) $row->cover)), []);
                 }
@@ -140,7 +160,7 @@ class LegacyImport
      */
     protected function give(int $userId, string $url, array $frame): bool
     {
-        if (! self::isHttp($url)) {
+        if (! self::isHttp($url) || strlen($url) > self::MAX_URL) {
             return false;
         }
 
@@ -173,8 +193,15 @@ class LegacyImport
             return null;
         }
 
+        $relative = rawurldecode((string) parse_url(substr($url, strlen($base)), PHP_URL_PATH));
+
+        // realpath() throws on a NUL byte rather than returning false.
+        if (str_contains($relative, "\0")) {
+            return null;
+        }
+
         $public = realpath($this->paths->public);
-        $file = realpath($this->paths->public.'/'.rawurldecode((string) parse_url(substr($url, strlen($base)), PHP_URL_PATH)));
+        $file = realpath($this->paths->public.'/'.$relative);
 
         if (! $public || ! $file || ! str_starts_with($file, $public.DIRECTORY_SEPARATOR) || ! is_file($file)) {
             return null;
@@ -248,9 +275,14 @@ class LegacyImport
         return $value === null ? null : (string) $value;
     }
 
+    /**
+     * Resolved only when needed: building the URL generator builds the route
+     * table, and inside the enable migration that happens before Backdrop's
+     * own routes are registered, leaving that boot without them.
+     */
     protected function forumBase(): string
     {
-        return rtrim($this->url->to('forum')->base(), '/').'/';
+        return rtrim(resolve(UrlGenerator::class)->to('forum')->base(), '/').'/';
     }
 
     protected static function isHttp(string $url): bool

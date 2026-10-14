@@ -20,7 +20,10 @@ class ImportCommand extends AbstractCommand
         $import = resolve(LegacyImport::class);
         $counts = $import->import();
 
-        $this->info("Imported {$counts['coverStudio']} Cover Studio and {$counts['sycho']} Profile Cover covers.");
+        if ($counts['coverStudio'] + $counts['sycho'] > 0) {
+            $this->info("Imported {$counts['coverStudio']} Cover Studio and {$counts['sycho']} Profile Cover covers.");
+        }
+
         $this->info('Copied '.$import->localize(resolve(CoverStore::class)).' cover files onto Backdrop\'s storage.');
         $this->info('The old extension\'s data and files were left untouched.');
 

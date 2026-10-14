@@ -47,8 +47,17 @@ class DefaultCoverController implements RequestHandlerInterface
 
                 $this->validator->assertImageValid('cover', $file);
                 $frame = Frame::fromInput($input);
-                $this->settings->set(Settings::DEFAULT, $this->store->store($file));
-                $this->saveFrame($frame);
+                $stored = $this->store->store($file);
+
+                try {
+                    $this->saveFrame($frame);
+                    $this->settings->set(Settings::DEFAULT, $stored);
+                } catch (\Throwable $e) {
+                    $this->store->delete($stored);
+
+                    throw $e;
+                }
+
                 $this->store->delete($current);
                 break;
 

@@ -7,6 +7,8 @@ use Illuminate\Contracts\Filesystem\Factory;
 use Illuminate\Support\Str;
 use Intervention\Image\ImageManager;
 use Psr\Http\Message\UploadedFileInterface;
+use RuntimeException;
+use Throwable;
 
 /**
  * The files behind covers, on the extension's own disk (public/assets/backdrop
@@ -27,6 +29,10 @@ class CoverStore
 
     private const FULL_WIDTH = 1920;
     private const SMALL_WIDTH = 960;
+
+    // WebP cannot be taller than 16383px, and GD then writes an empty file
+    // without complaint. No cover needs to be taller than this anyway.
+    private const MAX_HEIGHT = 4096;
 
     protected Cloud $disk;
 
@@ -49,11 +55,25 @@ class CoverStore
         $animated = $image->isAnimated();
         $name = $folder.Str::random(20).'.'.($animated ? 'gif' : 'webp');
 
-        foreach ([$name => self::FULL_WIDTH, self::small($name) => self::SMALL_WIDTH] as $path => $width) {
-            $copy = clone $image;
-            $copy->scaleDown(width: $width);
+        $written = [];
 
-            $this->disk->put($path, $animated ? $copy->toGif() : $copy->toWebp(quality: 85));
+        try {
+            foreach ([$name => self::FULL_WIDTH, self::small($name) => self::SMALL_WIDTH] as $target => $width) {
+                $copy = clone $image;
+                $copy->scaleDown(width: $width, height: self::MAX_HEIGHT);
+                $encoded = (string) ($animated ? $copy->toGif() : $copy->toWebp(quality: 85));
+
+                if ($encoded === '') {
+                    throw new RuntimeException('The cover image could not be encoded.');
+                }
+
+                $this->disk->put($target, $encoded);
+                $written[] = $target;
+            }
+        } catch (Throwable $e) {
+            $this->disk->delete($written);
+
+            throw $e;
         }
 
         return $name;

@@ -3,6 +3,7 @@
 namespace Ernestdefoe\Backdrop\Tests\integration\api;
 
 use Ernestdefoe\Backdrop\CoverStore;
+use Ernestdefoe\Backdrop\CoverValidator;
 use Ernestdefoe\Backdrop\LegacyImport;
 use Flarum\Group\Group;
 use Flarum\Testing\integration\RetrievesAuthorizedUsers;
@@ -19,6 +20,8 @@ class BackdropTest extends TestCase
 
     /** @var list<string> */
     private array $temp = [];
+
+    private bool $legacySchema = false;
 
     protected function setUp(): void
     {
@@ -43,6 +46,23 @@ class BackdropTest extends TestCase
     {
         foreach ($this->temp as $file) {
             @unlink($file);
+        }
+
+        // MySQL commits DDL at once, and with it the test's transaction, so
+        // nothing the import tests do is rolled back: undo it all by hand.
+        if ($this->legacySchema) {
+            $db = $this->database();
+            $schema = $db->getSchemaBuilder();
+            $schema->dropIfExists('cover_studio_user_data');
+
+            if ($schema->hasColumn('users', 'cover')) {
+                $schema->table('users', fn (Blueprint $table) => $table->dropColumn('cover'));
+            }
+
+            $db->table('users')->update(['backdrop_cover' => null, 'backdrop_x' => 50, 'backdrop_y' => 50, 'backdrop_zoom' => 1]);
+            $db->table('users')->whereIn('id', [3, 4, 5])->delete();
+            $db->table('settings')->where('key', 'like', 'tryhackx-cover-studio.%')->orWhere('key', 'like', 'ernestdefoe-backdrop.%')->delete();
+            $db->table('group_permission')->where('group_id', 4)->whereIn('permission', ['tryhackx-cover-studio.setCover', 'ernestdefoe-backdrop.set'])->delete();
         }
 
         parent::tearDown();
@@ -141,6 +161,46 @@ class BackdropTest extends TestCase
 
         [$width] = getimagesize($this->disk().'/'.User::find(2)->backdrop_cover);
         $this->assertSame(1920, $width);
+    }
+
+    private function gif(int $width, int $height, int $frames): UploadedFile
+    {
+        $manager = \Intervention\Image\ImageManager::gd();
+        $data = (string) $manager->animate(function ($animation) use ($manager, $width, $height, $frames) {
+            for ($i = 0; $i < $frames; $i++) {
+                $animation->add($manager->create($width, $height)->fill(sprintf('%06x', $i * 40000)), 0.1);
+            }
+        })->toGif();
+
+        $path = tempnam(sys_get_temp_dir(), 'backdrop').'.gif';
+        file_put_contents($path, $data);
+        $this->temp[] = $path;
+
+        return new UploadedFile($path, strlen($data), UPLOAD_ERR_OK, 'cover.gif', 'image/gif');
+    }
+
+    #[Test]
+    public function animated_gifs_stay_animated_but_costly_ones_are_refused_before_decoding(): void
+    {
+        // 20 frames of 1500x1500 is a few KB of file and 45 million pixels of work.
+        $this->assertSame(422, $this->upload(2, 2, $this->gif(1500, 1500, 20))->getStatusCode());
+
+        $this->assertSame(200, $this->upload(2, 2, $this->gif(400, 200, 5))->getStatusCode());
+        $stored = User::find(2)->backdrop_cover;
+        $this->assertStringEndsWith('.gif', $stored);
+        $this->assertSame(5, CoverValidator::gifFrames((string) file_get_contents($this->disk().'/'.$stored)));
+    }
+
+    #[Test]
+    public function very_tall_images_are_stored_whole_not_as_empty_files(): void
+    {
+        // Within core's pixel cap, but taller than WebP can encode.
+        $this->assertSame(200, $this->upload(2, 2, $this->image(800, 17000))->getStatusCode());
+
+        $stored = User::find(2)->backdrop_cover;
+        [, $height] = getimagesize($this->disk().'/'.$stored);
+        $this->assertLessThanOrEqual(4096, $height);
+        $this->assertGreaterThan(0, filesize($this->disk().'/'.str_replace('.webp', '-sm.webp', $stored)));
     }
 
     #[Test]
@@ -408,9 +468,38 @@ class BackdropTest extends TestCase
     }
 
     #[Test]
+    public function covers_come_over_from_profile_cover_by_url_then_as_files(): void
+    {
+        $this->app();
+        $this->legacySchema = true;
+        $db = $this->database();
+        $db->getSchemaBuilder()->table('users', fn (Blueprint $table) => $table->string('cover', 150)->nullable());
+
+        // sycho/flarum-profile-cover kept the file name, served from assets/covers.
+        $covers = $this->tmpDir().'/public/assets/covers';
+        @mkdir($covers, 0755, true);
+        copy($this->image()->getStream()->getMetadata('uri'), "$covers/legacy.png");
+        $db->table('users')->where('id', 2)->update(['cover' => 'legacy.png']);
+        $db->table('users')->where('id', 3)->update(['cover' => 'missing.png']);
+
+        $import = $this->app()->getContainer()->make(LegacyImport::class);
+        $this->assertSame(['coverStudio' => 0, 'sycho' => 2], $import->import());
+        $this->assertStringEndsWith('/assets/covers/legacy.png', $db->table('users')->find(2)->backdrop_cover);
+
+        // Only the file that exists is copied; the missing one stays a URL.
+        $this->assertSame(1, $import->localize($this->app()->getContainer()->make(CoverStore::class)));
+        $stored = $db->table('users')->find(2)->backdrop_cover;
+        $this->assertStringEndsWith('.webp', $stored);
+        $this->assertFileExists($this->disk().'/'.$stored);
+        $this->assertFileExists("$covers/legacy.png");
+        $this->assertStringEndsWith('/assets/covers/missing.png', $db->table('users')->find(3)->backdrop_cover);
+    }
+
+    #[Test]
     public function covers_come_over_from_cover_studio_without_overwriting_anything(): void
     {
         $this->app();
+        $this->legacySchema = true;
         $schema = $this->database()->getSchemaBuilder();
         $schema->create('cover_studio_user_data', function (Blueprint $table) {
             $table->unsignedInteger('user_id')->primary();
@@ -427,13 +516,22 @@ class BackdropTest extends TestCase
             ['user_id' => 3, 'cover_file_id' => 8, 'cover_url' => 'https://cdn.example/three.jpg', 'cover_focus_x' => 10, 'cover_focus_y' => 10, 'cover_zoom' => 1],
             ['user_id' => 4, 'cover_file_id' => 9, 'cover_url' => 'javascript:alert(1)', 'cover_focus_x' => 50, 'cover_focus_y' => 50, 'cover_zoom' => 1],
         ]);
+        $db->table('users')->insert(['id' => 5, 'username' => 'longurl', 'email' => 'long@machine.local', 'password' => 'unused', 'is_email_confirmed' => 1, 'joined_at' => '2026-01-01 00:00:00']);
+        $db->table('cover_studio_user_data')->insert(['user_id' => 5, 'cover_file_id' => 10, 'cover_url' => 'https://cdn.example/'.str_repeat('a', 470).'.jpg', 'cover_focus_x' => 50, 'cover_focus_y' => 50, 'cover_zoom' => 1]);
         $db->table('users')->where('id', 3)->update(['backdrop_cover' => 'mine.webp']);
         $db->table('group_permission')->insert(['group_id' => 4, 'permission' => 'tryhackx-cover-studio.setCover']);
         $db->table('settings')->insert(['key' => 'tryhackx-cover-studio.cover_height', 'value' => '300']);
 
         $import = $this->app()->getContainer()->make(LegacyImport::class);
-        $this->assertSame(['coverStudio' => 1, 'sycho' => 0], $import->import());
+        // A 494-character URL fits too (Cover Studio's own column is 500 long).
+        $this->assertSame(['coverStudio' => 2, 'sycho' => 0], $import->import());
+        $this->assertSame('https://cdn.example/'.str_repeat('a', 470).'.jpg', $db->table('users')->find(5)->backdrop_cover);
+
+        // It runs once. A member who removes the imported cover keeps it removed.
+        $db->table('users')->where('id', 2)->update(['backdrop_cover' => null]);
         $this->assertSame(['coverStudio' => 0, 'sycho' => 0], $import->import());
+        $this->assertNull($db->table('users')->find(2)->backdrop_cover);
+        $db->table('users')->where('id', 2)->update(['backdrop_cover' => 'https://cdn.example/two.jpg']);
 
         $two = $db->table('users')->find(2);
         $this->assertSame('https://cdn.example/two.jpg', $two->backdrop_cover);

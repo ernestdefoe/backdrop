@@ -6,7 +6,8 @@ use Flarum\Database\Migration;
 // row every page already loads, so no query anywhere has to join or eager
 // load anything for it.
 return Migration::addColumns('users', [
-    'backdrop_cover' => ['string', 'length' => 255, 'nullable' => true],
+    // Long enough for a cover brought over as a URL from another extension.
+    'backdrop_cover' => ['string', 'length' => 1024, 'nullable' => true],
     'backdrop_x' => ['float', 'default' => 50],
     'backdrop_y' => ['float', 'default' => 50],
     'backdrop_zoom' => ['float', 'default' => 1],
